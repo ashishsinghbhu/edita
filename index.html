@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Edita - Advanced text editor similar to Notepad++">
+    <meta name="theme-color" content="#1e1e1e">
+    <title>Edita - Advanced Text Editor</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
+</head>
+<body>
+    <div id="error-toast" class="error-toast"></div>
+    <div class="container">
+        <div class="toolbar">
+            <div class="toolbar-section">
+                <button class="toolbar-btn" id="newBtn" title="New File (Ctrl+N)">
+                    <span class="icon">📄</span><span class="label">New</span>
+                </button>
+                <button class="toolbar-btn" id="openBtn" title="Open File (Ctrl+O)">
+                    <span class="icon">📂</span><span class="label">Open</span>
+                </button>
+                <button class="toolbar-btn" id="saveBtn" title="Save (Ctrl+S)">
+                    <span class="icon">💾</span><span class="label">Save</span>
+                </button>
+                <input type="file" id="fileInput" style="display: none;" accept="*/*">
+            </div>
+            <div class="toolbar-section">
+                <button class="toolbar-btn" id="findBtn" title="Find (Ctrl+F)">
+                    <span class="icon">🔍</span><span class="label">Find</span>
+                </button>
+                <button class="toolbar-btn" id="replaceBtn" title="Replace (Ctrl+H)">
+                    <span class="icon">🔄</span><span class="label">Replace</span>
+                </button>
+            </div>
+            <div class="toolbar-section">
+                <select id="languageSelect" title="Language Mode">
+                    <option value="text">Plain Text</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="python">Python</option>
+                    <option value="html">HTML</option>
+                    <option value="css">CSS</option>
+                    <option value="json">JSON</option>
+                    <option value="markdown">Markdown</option>
+                </select>
+            </div>
+            <div class="toolbar-section">
+                <button class="toolbar-btn" id="themeBtn" title="Toggle Theme">
+                    <span class="icon">🌙</span><span class="label">Theme</span>
+                </button>
+                <button class="toolbar-btn" id="logsBtn" title="View Logs">
+                    <span class="icon">📋</span><span class="label">Logs</span>
+                </button>
+            </div>
+        </div>
+        <div class="tabs-container" id="tabsContainer">
+            <div class="tab active" data-tab-id="0">
+                <span class="tab-title">Untitled</span>
+                <button class="tab-close" data-tab-id="0">×</button>
+            </div>
+            <button class="new-tab-btn" id="newTabBtn">+</button>
+        </div>
+        <div class="editor-wrapper">
+            <div class="line-numbers" id="lineNumbers">1</div>
+            <textarea id="editor" class="editor" placeholder="Start typing..." spellcheck="false"></textarea>
+        </div>
+        <div class="status-bar">
+            <div class="status-item"><span id="fileName">Untitled</span></div>
+            <div class="status-item"><span id="fileSize">0 bytes</span></div>
+            <div class="status-item"><span id="lineCol">Line 1, Col 1</span></div>
+            <div class="status-item"><span id="charCount">0 characters</span></div>
+            <div class="status-item" id="installPrompt" style="display:none;"><button class="install-btn" id="installBtn">📥 Install</button></div>
+        </div>
+        <div id="findDialog" class="dialog">
+            <div class="dialog-content">
+                <h3>Find & Replace</h3>
+                <div class="input-group"><label>Find:</label><input type="text" id="findInput" placeholder="Search..."></div>
+                <div class="input-group"><label>Replace:</label><input type="text" id="replaceInput" placeholder="Replace..."></div>
+                <div class="dialog-buttons">
+                    <button id="findNextBtn">Find Next</button>
+                    <button id="replaceOneBtn">Replace</button>
+                    <button id="replaceAllBtn">Replace All</button>
+                    <button id="closeDialogBtn">Close</button>
+                </div>
+                <div id="findResults" class="find-results"></div>
+            </div>
+        </div>
+        <div id="logsDialog" class="dialog">
+            <div class="dialog-content logs-content">
+                <h3>Logs & Debug Info</h3>
+                <div class="logs-controls">
+                    <button id="clearLogsBtn">Clear</button>
+                    <button id="exportLogsBtn">Export</button>
+                    <button id="closeLogsBtn">Close</button>
+                </div>
+                <pre id="logsContent"></pre>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
