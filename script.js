@@ -727,7 +727,7 @@ class Edita {
                 
                 reader.onload = (e) => {
                         try {
-                            const content = e.target.result;
+                            let content = e.target.result;
                             
                             // Prevent duplicate tabs for same file
                             const existingTab = this.tabs.find(t => t.name === file.name);
@@ -738,13 +738,26 @@ class Edita {
                                 return;
                             }
                             
+                            // Auto-format JSON files
+                            const detectedLanguage = this.detectLanguage(file.name);
+                            if (detectedLanguage === 'json') {
+                                try {
+                                    const parsed = JSON.parse(content);
+                                    content = JSON.stringify(parsed, null, 2);
+                                    this.log('INFO', `Auto-formatted JSON file: ${file.name}`);
+                                } catch (jsonError) {
+                                    this.log('WARN', `Failed to parse JSON file: ${file.name}`, jsonError);
+                                    // Keep original content if parsing fails
+                                }
+                            }
+                            
                             const newId = this.tabs.length > 0 ? Math.max(...this.tabs.map(t => t.id)) + 1 : 0;
                             this.tabs.push({ 
                                 id: newId, 
                                 name: file.name, 
                                 content: content, 
                                 modified: false,
-                                language: this.detectLanguage(file.name),
+                                language: detectedLanguage,
                                 fileHandle: null
                             });
                             this.switchTab(newId);
