@@ -1,4 +1,4 @@
-const CACHE_NAME = 'edita-v19';
+const CACHE_NAME = 'edita-v20';
 const urlsToCache = [
   './',
   './index.html',
