@@ -88,6 +88,16 @@ class Edita {
             
             // Keyboard shortcuts
             document.addEventListener('keydown', (e) => {
+                // Close find dialog with Escape key
+                if (e.key === 'Escape') {
+                    const findDialog = document.getElementById('findDialog');
+                    if (findDialog.classList.contains('active')) {
+                        this.closeDialog();
+                        e.preventDefault();
+                        return;
+                    }
+                }
+                
                 if (e.ctrlKey || e.metaKey) {
                     switch(e.key.toLowerCase()) {
                         case 's':
@@ -152,6 +162,30 @@ class Edita {
                 if (hasUnsaved) {
                     e.preventDefault();
                     e.returnValue = '';
+                }
+            });
+
+            // Drag and drop file support
+            document.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.dataTransfer.dropEffect = 'copy';
+            });
+
+            document.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    // Create a synthetic event to reuse openFile logic
+                    const syntheticEvent = {
+                        target: {
+                            files: files,
+                            value: ''
+                        }
+                    };
+                    this.openFile(syntheticEvent);
                 }
             });
 
@@ -469,22 +503,46 @@ class Edita {
             const pastedText = e.clipboardData.getData('text');
             this.log('INFO', `Pasted text length: ${pastedText.length}`);
             
-            // Only attempt JSON formatting if it looks like JSON
-            if (!pastedText.trim().startsWith('{') && !pastedText.trim().startsWith('[')) {
-                this.log('INFO', 'Not JSON format, skipping');
-                return; // Let default paste happen
+            let formatted = null;
+            
+            // Try JSON formatting
+            if (pastedText.trim().startsWith('{') || pastedText.trim().startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(pastedText);
+                    formatted = JSON.stringify(parsed, null, 2);
+                    this.log('INFO', 'Successfully formatted as JSON');
+                } catch (jsonError) {
+                    this.log('INFO', `Not valid JSON: ${jsonError.message}`);
+                }
             }
             
-            // Try to parse as JSON
-            try {
-                const parsed = JSON.parse(pastedText);
-                this.log('INFO', 'Successfully parsed as JSON');
-                
-                // If it's valid JSON, format it nicely
-                const formatted = JSON.stringify(parsed, null, 2);
-                this.log('INFO', `Formatted JSON length: ${formatted.length}`);
-                
-                // Prevent default paste
+            // Try XML/HTML formatting
+            if (!formatted && (pastedText.trim().startsWith('<') || pastedText.includes('<?xml'))) {
+                try {
+                    formatted = this.formatXmlHtml(pastedText);
+                    if (formatted !== pastedText) {
+                        this.log('INFO', 'Successfully formatted as XML/HTML');
+                    }
+                } catch (xmlError) {
+                    this.log('INFO', `XML/HTML formatting failed: ${xmlError.message}`);
+                }
+            }
+            
+            // Try CSS formatting
+            if (!formatted && pastedText.includes('{') && pastedText.includes('}') && 
+                (pastedText.includes(':') || pastedText.match(/[.#]\w+\s*{/))) {
+                try {
+                    formatted = this.formatCss(pastedText);
+                    if (formatted !== pastedText) {
+                        this.log('INFO', 'Successfully formatted as CSS');
+                    }
+                } catch (cssError) {
+                    this.log('INFO', `CSS formatting failed: ${cssError.message}`);
+                }
+            }
+            
+            // If we formatted something, insert it
+            if (formatted && formatted !== pastedText) {
                 e.preventDefault();
                 
                 // Insert formatted JSON at cursor position
@@ -512,15 +570,93 @@ class Edita {
                 this.updateLineNumbers();
                 this.updateStatusBar();
                 
-                this.log('INFO', 'JSON formatted and pasted successfully');
-                this.showToast('JSON formatted automatically', 'success');
-            } catch (jsonError) {
-                // Not valid JSON, let default paste happen
-                this.log('INFO', `Not valid JSON: ${jsonError.message}`);
+                this.log('INFO', 'Code formatted and pasted successfully');
+                this.showToast('Code formatted automatically', 'success');
             }
         } catch (error) {
             this.logError('PASTE ERROR', 'Error handling paste', error);
         }
+    }
+
+    formatXmlHtml(text) {
+        let formatted = '';
+        let indent = 0;
+        const tab = '  ';
+        
+        // Remove existing whitespace between tags
+        text = text.replace(/>\s+</g, '><');
+        
+        // Split by tags
+        const tokens = text.split(/(<[^>]+>)/g).filter(t => t.trim());
+        
+        for (let token of tokens) {
+            if (token.startsWith('</')) {
+                // Closing tag - decrease indent
+                indent = Math.max(0, indent - 1);
+                formatted += tab.repeat(indent) + token + '\n';
+            } else if (token.startsWith('<')) {
+                // Opening or self-closing tag
+                const isSelfClosing = token.endsWith('/>') || 
+                    /^<(br|hr|img|input|link|meta|area|base|col|command|embed|keygen|param|source|track|wbr)[^>]*>$/i.test(token);
+                const isComment = token.startsWith('<!--');
+                
+                formatted += tab.repeat(indent) + token + '\n';
+                
+                if (!isSelfClosing && !isComment) {
+                    indent++;
+                }
+            } else {
+                // Text content
+                if (token.trim()) {
+                    formatted += tab.repeat(indent) + token.trim() + '\n';
+                }
+            }
+        }
+        
+        return formatted.trim();
+    }
+
+    formatCss(text) {
+        let formatted = '';
+        let indent = 0;
+        const tab = '  ';
+        
+        // Remove extra whitespace
+        text = text.replace(/\s+/g, ' ').trim();
+        
+        // Add newlines and indentation
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            const nextChar = text[i + 1];
+            
+            if (char === '{') {
+                formatted += ' {\n';
+                indent++;
+            } else if (char === '}') {
+                indent = Math.max(0, indent - 1);
+                formatted += '\n' + tab.repeat(indent) + '}';
+                if (nextChar && nextChar !== '}') {
+                    formatted += '\n\n';
+                }
+            } else if (char === ';' && indent > 0) {
+                formatted += ';\n';
+                // Add indentation for next line
+                if (nextChar && nextChar !== '}') {
+                    formatted += tab.repeat(indent);
+                }
+            } else if (char === ' ' && formatted.endsWith('\n')) {
+                // Skip spaces at start of line
+                continue;
+            } else {
+                formatted += char;
+                // Add indentation after newline
+                if (char === '\n' && nextChar && nextChar !== '}' && !formatted.endsWith(tab.repeat(indent))) {
+                    formatted += tab.repeat(indent);
+                }
+            }
+        }
+        
+        return formatted.trim();
     }
 
     handleTextSelection() {
