@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<body>
+<h1>LocalStorage Test</h1>
+<button onclick="localStorage.setItem('test', 'working'); alert('Saved!')">Save</button>
+<button onclick="alert(localStorage.getItem('test'))">Load</button>
+<script>
+console.log('localStorage available:', typeof localStorage !== 'undefined');
+console.log('Current edita_open_tabs:', localStorage.getItem('edita_open_tabs'));
+</script>
+</body>
+</html>

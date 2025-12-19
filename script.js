@@ -226,8 +226,10 @@ class Edita {
     }
 
     saveOpenTabs() {
+        console.log('saveOpenTabs called, isLoadingFiles:', this.isLoadingFiles);
         // Don't save during file loading to prevent browser crashes
         if (this.isLoadingFiles) {
+            console.log('Skipping save - still loading files');
             return;
         }
         
@@ -268,8 +270,9 @@ class Edita {
             }
             
             localStorage.setItem('edita_open_tabs', stateJson);
-            console.log(`Saved ${tabsToSave.length} open tabs (${(stateJson.length / 1024).toFixed(1)}KB)`);
+            console.log(`✅ Successfully saved ${tabsToSave.length} open tabs (${(stateJson.length / 1024).toFixed(1)}KB)`);
             console.log('File restore feature active - v1.1');
+            console.log('Verify save:', localStorage.getItem('edita_open_tabs') ? 'SUCCESS' : 'FAILED');
         } catch (e) {
             console.error('Failed to save open tabs', e);
             // If localStorage is full, try to clear old data
@@ -681,7 +684,9 @@ class Edita {
             const files = Array.from(event.target.files);
             if (files.length === 0) return;
 
+            console.log('openFile: Starting to load', files.length, 'files');
             this.isLoadingFiles = true;
+            console.log('openFile: Set isLoadingFiles to true');
             
             // Limit number of files to prevent crashes
             const MAX_FILES = 10;
@@ -739,6 +744,7 @@ class Edita {
                             
                             // Show summary toast when all files processed
                             if (loadedCount + skippedCount === files.length) {
+                                console.log('All files loaded, calling saveOpenTabs...');
                                 this.isLoadingFiles = false;
                                 this.saveOpenTabs();
                                 
