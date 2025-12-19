@@ -1,31 +1,17 @@
-const CACHE_NAME = 'edita-v20';
-const urlsToCache = [
-  './',
-  './index.html',
-  './styles.css',
-  './script.js',
-  './manifest.json'
-];
+const CACHE_NAME = 'edita-disabled';
 
+// Service worker disabled - always fetch fresh content
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Opened cache');
-        return cache.addAll(urlsToCache);
-      })
-  );
+  console.log('Service worker installed (cache disabled)');
+  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
+  // Always fetch from network, never use cache
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        if (response) {
-          return response;
-        }
-        return fetch(event.request);
-      })
+    fetch(event.request, {
+      cache: 'no-store'
+    })
   );
 });
 
