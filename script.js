@@ -257,13 +257,29 @@ class Edita {
                 e.dataTransfer.dropEffect = 'copy';
             });
 
-            document.addEventListener('drop', (e) => {
+            document.addEventListener('drop', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
+                // Try to get file handles using File System Access API (for drag & drop)
+                if (e.dataTransfer.items && 'getAsFileSystemHandle' in DataTransferItem.prototype) {
+                    const items = Array.from(e.dataTransfer.items);
+                    const handlePromises = items
+                        .filter(item => item.kind === 'file')
+                        .map(item => item.getAsFileSystemHandle());
+                    
+                    try {
+                        const handles = await Promise.all(handlePromises);
+                        await this.openFilesWithHandles(handles);
+                        return;
+                    } catch (error) {
+                        console.log('File System Access API not available for drag & drop, using fallback');
+                    }
+                }
+                
+                // Fallback for browsers that don't support getAsFileSystemHandle
                 const files = e.dataTransfer.files;
                 if (files.length > 0) {
-                    // Create a synthetic event to reuse openFile logic
                     const syntheticEvent = {
                         target: {
                             files: files,
@@ -1127,6 +1143,58 @@ class Edita {
                 this.logError('OPEN FILE ERROR', 'Error opening file with picker', error);
                 this.showToast('Failed to open file', 'error');
             }
+        }
+    }
+
+    async openFilesWithHandles(fileHandles) {
+        try {
+            if (!fileHandles || fileHandles.length === 0) return;
+            
+            for (const fileHandle of fileHandles) {
+                const file = await fileHandle.getFile();
+                const content = await file.text();
+                
+                // Check if file is already open
+                const existingTab = this.tabs.find(t => t.name === file.name);
+                if (existingTab) {
+                    this.switchTab(existingTab.id);
+                    this.log('INFO', `${file.name} is already open`);
+                    continue;
+                }
+                
+                // Auto-format JSON files
+                let formattedContent = content;
+                const detectedLanguage = this.detectLanguage(file.name);
+                if (detectedLanguage === 'json') {
+                    try {
+                        const parsed = JSON.parse(content);
+                        formattedContent = JSON.stringify(parsed, null, 2);
+                        this.log('INFO', `Auto-formatted JSON file: ${file.name}`);
+                    } catch (jsonError) {
+                        this.log('WARN', `Failed to parse JSON file: ${file.name}`, jsonError);
+                    }
+                }
+                
+                const newId = this.tabs.length > 0 ? Math.max(...this.tabs.map(t => t.id)) + 1 : 0;
+                this.tabs.push({
+                    id: newId,
+                    name: file.name,
+                    content: formattedContent,
+                    modified: false,
+                    language: detectedLanguage,
+                    fileHandle: fileHandle // Store the handle for later saving!
+                });
+                this.switchTab(newId);
+                this.renderTabs();
+                this.log('INFO', `File opened with handle: ${file.name}`);
+            }
+            
+            // Save to persist the fileHandles to IndexedDB
+            await this.saveOpenTabs();
+            this.showToast(`Opened ${fileHandles.length} file${fileHandles.length > 1 ? 's' : ''}`, 'success');
+        } catch (error) {
+            this.logError('OPEN FILES ERROR', 'Error opening files with handles', error);
+            this.showToast('Failed to open file', 'error');
         }
     }
 
