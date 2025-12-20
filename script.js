@@ -11,11 +11,96 @@ class Edita {
         this.deferredPrompt = null;
         this.isLoadingFiles = false;
         this.saveTabsTimeout = null;
+        this.db = null; // IndexedDB for storing file handles
         
+        this.initAsync();
+    }
+
+    async initAsync() {
+        await this.initIndexedDB();
         this.init();
     }
 
-    init() {
+    async initIndexedDB() {
+        return new Promise((resolve, reject) => {
+            try {
+                const request = indexedDB.open('EditaDB', 1);
+                
+                request.onerror = () => {
+                    console.error('IndexedDB failed to open');
+                    resolve(); // Resolve anyway to continue initialization
+                };
+                
+                request.onsuccess = (event) => {
+                    this.db = event.target.result;
+                    console.log('IndexedDB initialized successfully');
+                    resolve();
+                };
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('fileHandles')) {
+                        db.createObjectStore('fileHandles', { keyPath: 'tabId' });
+                        console.log('Created fileHandles object store');
+                    }
+                };
+            } catch (error) {
+                console.error('IndexedDB initialization failed:', error);
+                resolve(); // Resolve anyway to continue initialization
+            }
+        });
+    }
+
+    async saveFileHandleToIndexedDB(tabId, fileHandle) {
+        if (!this.db || !fileHandle) return;
+        
+        try {
+            const transaction = this.db.transaction(['fileHandles'], 'readwrite');
+            const store = transaction.objectStore('fileHandles');
+            await store.put({ tabId, fileHandle });
+            console.log(`Saved fileHandle for tab ${tabId} to IndexedDB`);
+        } catch (error) {
+            console.error('Failed to save fileHandle to IndexedDB:', error);
+        }
+    }
+
+    async getFileHandleFromIndexedDB(tabId) {
+        if (!this.db) return null;
+        
+        try {
+            return new Promise((resolve, reject) => {
+                const transaction = this.db.transaction(['fileHandles'], 'readonly');
+                const store = transaction.objectStore('fileHandles');
+                const request = store.get(tabId);
+                
+                request.onsuccess = () => {
+                    resolve(request.result?.fileHandle || null);
+                };
+                
+                request.onerror = () => {
+                    reject(request.error);
+                };
+            });
+        } catch (error) {
+            console.error('Failed to get fileHandle from IndexedDB:', error);
+            return null;
+        }
+    }
+
+    async clearFileHandleFromIndexedDB(tabId) {
+        if (!this.db) return;
+        
+        try {
+            const transaction = this.db.transaction(['fileHandles'], 'readwrite');
+            const store = transaction.objectStore('fileHandles');
+            await store.delete(tabId);
+            console.log(`Cleared fileHandle for tab ${tabId} from IndexedDB`);
+        } catch (error) {
+            console.error('Failed to clear fileHandle from IndexedDB:', error);
+        }
+    }
+
+    async init() {
         try {
             console.log('Starting Edita initialization...');
             this.log('INFO', 'Initializing Edita...');
@@ -194,7 +279,7 @@ class Edita {
             this.loadTheme();
             this.loadVerticalTabsPreference();
             this.loadLogsFromStorage();
-            this.loadOpenTabs();
+            await this.loadOpenTabs();
             
             this.log('INFO', 'Edita initialized successfully');
             console.log('Edita initialized successfully');
@@ -267,7 +352,7 @@ class Edita {
         }
     }
 
-    saveOpenTabs() {
+    async saveOpenTabs() {
         console.log('saveOpenTabs called, isLoadingFiles:', this.isLoadingFiles);
         // Don't save during file loading to prevent browser crashes
         if (this.isLoadingFiles) {
@@ -313,8 +398,15 @@ class Edita {
             }
             
             localStorage.setItem('edita_open_tabs', stateJson);
+            
+            // Save file handles to IndexedDB (await all saves)
+            const handleSavePromises = this.tabs
+                .filter(tab => tab.fileHandle)
+                .map(tab => this.saveFileHandleToIndexedDB(tab.id, tab.fileHandle));
+            await Promise.all(handleSavePromises);
+            
             console.log(`✅ Successfully saved ${tabsToSave.length} open tabs (${(stateJson.length / 1024).toFixed(1)}KB)`);
-            console.log('File restore feature active - v1.1');
+            console.log('File restore feature active - v1.2 (with IndexedDB)');
             console.log('Verify save:', localStorage.getItem('edita_open_tabs') ? 'SUCCESS' : 'FAILED');
         } catch (e) {
             console.error('Failed to save open tabs', e);
@@ -326,7 +418,7 @@ class Edita {
         }
     }
 
-    loadOpenTabs() {
+    async loadOpenTabs() {
         try {
             const stored = localStorage.getItem('edita_open_tabs');
             if (!stored) {
@@ -393,6 +485,9 @@ class Edita {
             // Replace the default untitled tab with saved tabs
             this.tabs = validTabs;
             
+            // Restore file handles from IndexedDB
+            this.restoreFileHandles();
+            
             // Restore active tab
             const savedActiveTab = this.tabs.find(t => t.id === state.activeTabId);
             if (savedActiveTab) {
@@ -430,6 +525,38 @@ class Edita {
             
             // Keep the default untitled tab on error
             this.showToast('Failed to restore previous session', 'error');
+        }
+    }
+
+    async restoreFileHandles() {
+        for (const tab of this.tabs) {
+            try {
+                const fileHandle = await this.getFileHandleFromIndexedDB(tab.id);
+                if (fileHandle) {
+                    // Verify we still have permission
+                    const permission = await fileHandle.queryPermission({ mode: 'readwrite' });
+                    if (permission === 'granted') {
+                        tab.fileHandle = fileHandle;
+                        console.log(`Restored fileHandle for tab ${tab.id} (${tab.name})`);
+                    } else if (permission === 'prompt') {
+                        // Permission needs to be requested again
+                        const newPermission = await fileHandle.requestPermission({ mode: 'readwrite' });
+                        if (newPermission === 'granted') {
+                            tab.fileHandle = fileHandle;
+                            console.log(`Re-granted permission and restored fileHandle for tab ${tab.id} (${tab.name})`);
+                        } else {
+                            console.warn(`Permission denied for tab ${tab.id} (${tab.name})`);
+                            await this.clearFileHandleFromIndexedDB(tab.id);
+                        }
+                    } else {
+                        console.warn(`No permission for tab ${tab.id} (${tab.name})`);
+                        await this.clearFileHandleFromIndexedDB(tab.id);
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to restore fileHandle for tab ${tab.id}:`, error);
+                await this.clearFileHandleFromIndexedDB(tab.id);
+            }
         }
     }
 
@@ -986,6 +1113,8 @@ class Edita {
                     this.log('INFO', `File opened with handle: ${file.name}`);
                 }
                 
+                // Save to persist the fileHandles to IndexedDB
+                await this.saveOpenTabs();
                 this.showToast(`Opened ${fileHandles.length} file${fileHandles.length > 1 ? 's' : ''}`, 'success');
             } else {
                 // Fallback to file input for older browsers
@@ -1082,7 +1211,7 @@ class Edita {
                     currentTab.modified = false;
                     this.updateTabTitle();
                     this.renderTabs();
-                    this.saveOpenTabs(); // Save after updating fileHandle
+                    await this.saveOpenTabs(); // Save after updating fileHandle
                     this.log('INFO', `File saved: ${handle.name}`);
                     this.showToast(`File saved as ${handle.name}`, 'success');
                     return;
@@ -1154,6 +1283,10 @@ class Edita {
             }
 
             this.log('INFO', `Closing tab: ${tab.name}`);
+            
+            // Clean up IndexedDB entry
+            this.clearFileHandleFromIndexedDB(tabId);
+            
             this.tabs = this.tabs.filter(t => t.id !== tabId);
             
             if (this.tabs.length === 0) {
