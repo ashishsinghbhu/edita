@@ -379,8 +379,8 @@ class Edita {
         
         try {
             // Limit content size to prevent localStorage overflow
-            const MAX_CONTENT_SIZE = 500000; // 500KB per file
-            const MAX_TOTAL_SIZE = 5000000; // 5MB total
+            const MAX_CONTENT_SIZE = 50000000; // 50MB per file
+            const MAX_TOTAL_SIZE = 50000000; // 50MB total
             
             const tabsToSave = this.tabs.map(tab => {
                 let content = tab.content;
@@ -445,7 +445,7 @@ class Edita {
             
             // Check size before attempting to parse
             const storedSize = stored.length;
-            const MAX_RESTORE_SIZE = 3 * 1024 * 1024; // 3MB max
+            const MAX_RESTORE_SIZE = 50 * 1024 * 1024; // 50MB max
             
             if (storedSize > MAX_RESTORE_SIZE) {
                 console.warn(`Saved tabs too large (${(storedSize / 1024 / 1024).toFixed(1)}MB), clearing...`);
@@ -994,7 +994,7 @@ class Edita {
                 files.length = MAX_FILES;
             }
             
-            const maxSize = 5 * 1024 * 1024; // 5MB max per file
+            const maxSize = 50 * 1024 * 1024; // 50MB max per file
             let loadedCount = 0;
             let skippedCount = 0;
 
