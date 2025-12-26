@@ -109,13 +109,19 @@
         </div>
         <div id="findDialog" class="dialog">
             <div class="dialog-content">
-                <h3>Find & Replace</h3>
+                <div class="dialog-header" id="findDialogHeader">
+                    <h3>Find & Replace</h3>
+                </div>
                 <div class="input-group"><label>Find:</label><input type="text" id="findInput" placeholder="Search..."></div>
                 <div class="input-group"><label>Replace:</label><input type="text" id="replaceInput" placeholder="Replace with..."></div>
                 <div class="search-options">
                     <div class="checkbox-group">
                         <label><input type="checkbox" id="caseSensitive"> Case sensitive</label>
                         <label><input type="checkbox" id="wholeWord"> Whole word</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <label><input type="radio" name="searchScope" value="current" checked> Current file</label>
+                        <label><input type="radio" name="searchScope" value="all"> All open files</label>
                     </div>
                 </div>
                 <div class="dialog-buttons">

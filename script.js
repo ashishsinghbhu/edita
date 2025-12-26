@@ -159,6 +159,7 @@ class Edita {
             // Search results panel
             document.getElementById('closeSearchResultsBtn').addEventListener('click', () => this.closeSearchResults());
             this.initSearchResultsResize();
+            this.initDialogDrag();
             
             // Tab event delegation
             document.getElementById('tabsContainer').addEventListener('click', (e) => {
@@ -805,6 +806,12 @@ class Edita {
 
     handleTextSelection() {
         try {
+            // Don't auto-highlight if Find & Replace dialog is open
+            const findDialog = document.getElementById('findDialog');
+            if (findDialog && findDialog.classList.contains('active')) {
+                return;
+            }
+            
             // Clear any existing highlights
             this.clearHighlights();
             
@@ -907,14 +914,18 @@ class Edita {
 
     clearHighlights() {
         try {
-            const highlightLayer = document.querySelector('.highlight-layer');
-            if (highlightLayer) {
-                highlightLayer.remove();
-                // Remove scroll listener
-                if (this.highlightScrollSync) {
-                    this.editor.removeEventListener('scroll', this.highlightScrollSync);
-                    this.highlightScrollSync = null;
-                }
+            // Remove all highlight layers
+            const highlightLayers = document.querySelectorAll('.highlight-layer');
+            highlightLayers.forEach(layer => layer.remove());
+            
+            // Remove all individual highlight spans
+            const highlights = document.querySelectorAll('.text-highlight');
+            highlights.forEach(h => h.remove());
+            
+            // Remove scroll listener
+            if (this.highlightScrollSync) {
+                this.editor.removeEventListener('scroll', this.highlightScrollSync);
+                this.highlightScrollSync = null;
             }
         } catch (error) {
             this.logError('CLEAR HIGHLIGHTS ERROR', 'Error clearing highlights', error);
@@ -1435,6 +1446,9 @@ class Edita {
 
     find() {
         try {
+            // Clear any existing highlights before opening dialog
+            this.clearHighlights();
+            
             this.log('INFO', 'Opening find dialog');
             document.getElementById('findDialog').classList.add('active');
             document.getElementById('findInput').focus();
@@ -1461,27 +1475,71 @@ class Edita {
             const caseSensitive = document.getElementById('caseSensitive').checked;
             const wholeWord = document.getElementById('wholeWord').checked;
 
-            // Search in current document only
+            // Clear any highlights from Search All Files
+            this.clearHighlights();
+
+            // Get content and current position
             const content = this.editor.value;
             const currentPos = this.editor.selectionStart + 1;
             let index = this.findInText(content, searchTerm, currentPos, caseSensitive, wholeWord);
             
             if (index !== -1) {
+                // Found match after current position
                 this.editor.focus();
                 this.editor.setSelectionRange(index, index + searchTerm.length);
-                this.log('INFO', `Found: ${searchTerm} at ${index}`);
-                document.getElementById('findResults').textContent = `Found at position ${index}`;
+                
+                // After setting selection, get the ACTUAL line number from the editor
+                const actualStart = this.editor.selectionStart;
+                const textBeforeSelection = this.editor.value.substring(0, actualStart);
+                const lineNumber = textBeforeSelection.split('\n').length;
+                
+                const message = `Found at line ${lineNumber}`;
+                document.getElementById('findResults').textContent = message;
+                
+                this.scrollToSelection();
             } else {
+                // Wrap to beginning
                 const firstIndex = this.findInText(content, searchTerm, 0, caseSensitive, wholeWord);
                 if (firstIndex !== -1) {
+                    this.editor.focus();
                     this.editor.setSelectionRange(firstIndex, firstIndex + searchTerm.length);
-                    document.getElementById('findResults').textContent = 'Wrapped to beginning';
+                    
+                    // After setting selection, get the ACTUAL line number from the editor
+                    const actualStart = this.editor.selectionStart;
+                    const textBeforeSelection = this.editor.value.substring(0, actualStart);
+                    const lineNumber = textBeforeSelection.split('\n').length;
+                    
+                    const message = `Wrapped to line ${lineNumber}`;
+                    document.getElementById('findResults').textContent = message;
+                    
+                    this.scrollToSelection();
                 } else {
                     document.getElementById('findResults').textContent = 'No matches found';
                 }
             }
         } catch (error) {
             this.logError('FIND NEXT ERROR', 'Error finding next', error);
+        }
+    }
+
+    scrollToSelection() {
+        try {
+            // Calculate the line number of the current selection
+            const content = this.editor.value;
+            const selectionStart = this.editor.selectionStart;
+            const beforeSelection = content.substring(0, selectionStart);
+            const lineNumber = beforeSelection.split('\n').length;
+            
+            // Estimate line height (you can adjust this based on your CSS)
+            const lineHeight = 22;
+            const targetScrollTop = (lineNumber - 1) * lineHeight;
+            const editorHeight = this.editor.clientHeight;
+            
+            // Scroll to center the found text in the viewport
+            const scrollPosition = Math.max(0, targetScrollTop - editorHeight / 2);
+            this.editor.scrollTop = scrollPosition;
+        } catch (error) {
+            this.logError('SCROLL TO SELECTION ERROR', 'Error scrolling to selection', error);
         }
     }
 
@@ -1650,6 +1708,58 @@ class Edita {
         });
     }
 
+    initDialogDrag() {
+        const dialogContent = document.querySelector('#findDialog .dialog-content');
+        const header = document.getElementById('findDialogHeader');
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        header.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            header.style.cursor = 'grabbing';
+            
+            // Calculate offset from mouse to dialog-content's top-left
+            const rect = dialogContent.getBoundingClientRect();
+            offsetX = e.clientX - rect.left;
+            offsetY = e.clientY - rect.top;
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            
+            // Calculate new position
+            let newLeft = e.clientX - offsetX;
+            let newTop = e.clientY - offsetY;
+            
+            // Keep dialog within viewport bounds
+            const maxX = window.innerWidth - dialogContent.offsetWidth;
+            const maxY = window.innerHeight - dialogContent.offsetHeight;
+            
+            newLeft = Math.max(0, Math.min(newLeft, maxX));
+            newTop = Math.max(0, Math.min(newTop, maxY));
+            
+            // Remove centering transform and set absolute position
+            dialogContent.style.transform = 'none';
+            dialogContent.style.left = newLeft + 'px';
+            dialogContent.style.top = newTop + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                header.style.cursor = 'grab';
+            }
+        });
+        
+        // Set cursor style on header
+        header.style.cursor = 'grab';
+    }
+
     highlightMatch(text, searchTerm, caseSensitive) {
         const escapeHtml = (str) => str.replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
         const escapedText = escapeHtml(text);
@@ -1683,7 +1793,8 @@ class Edita {
             const searchTerm = document.getElementById('findInput').value;
             if (!searchTerm) return;
 
-            const searchScope = document.querySelector('input[name="searchScope"]:checked').value;
+            const searchScopeElement = document.querySelector('input[name="searchScope"]:checked');
+            const searchScope = searchScopeElement ? searchScopeElement.value : 'current';
             const caseSensitive = document.getElementById('caseSensitive').checked;
             const wholeWord = document.getElementById('wholeWord').checked;
 
@@ -1730,9 +1841,9 @@ class Edita {
             const selected = this.editor.value.substring(start, end);
             
             if (selected === searchTerm) {
-                const content = this.editor.value;
-                this.editor.value = content.substring(0, start) + replaceTerm + content.substring(end);
-                this.editor.setSelectionRange(start, start + replaceTerm.length);
+                // Use execCommand to preserve undo stack
+                this.editor.focus();
+                document.execCommand('insertText', false, replaceTerm);
                 this.handleInput();
                 this.log('INFO', `Replaced: ${searchTerm} with ${replaceTerm}`);
                 document.getElementById('findResults').textContent = 'Replaced 1 occurrence';
@@ -1755,7 +1866,17 @@ class Edita {
             const newContent = originalContent.split(searchTerm).join(replaceTerm);
             const count = (originalContent.match(new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
             
-            this.editor.value = newContent;
+            if (count === 0) {
+                document.getElementById('findResults').textContent = 'No matches found';
+                return;
+            }
+            
+            // Use execCommand to preserve undo stack
+            // Note: Undo will select all text (limitation of select() + execCommand)
+            this.editor.focus();
+            this.editor.select();
+            document.execCommand('insertText', false, newContent);
+            
             this.handleInput();
             
             this.log('INFO', `Replaced all: ${count} occurrences`);

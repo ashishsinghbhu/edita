@@ -405,12 +405,44 @@ body {
 
 .dialog-content {
     background-color: var(--bg-secondary);
-    padding: 20px;
+    padding: 0;
     border-radius: 4px;
     border: 1px solid var(--border);
     min-width: 400px;
     max-width: 90%;
     box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.dialog-header {
+    background-color: var(--bg-primary);
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    border-radius: 4px 4px 0 0;
+    user-select: none;
+}
+
+.dialog-header h3 {
+    margin: 0;
+    font-size: 14px;
+}
+
+.dialog-content > .input-group,
+.dialog-content > .search-options,
+.dialog-content > .dialog-buttons,
+.dialog-content > .find-results {
+    padding: 0 20px;
+}
+
+.dialog-content > .input-group:first-of-type {
+    padding-top: 20px;
+}
+
+.dialog-content > .dialog-buttons {
+    padding-bottom: 20px;
 }
 
 .logs-content {
