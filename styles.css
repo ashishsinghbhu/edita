@@ -426,11 +426,34 @@ body {
     border-radius: 4px 4px 0 0;
     user-select: none;
     cursor: grab;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .dialog-header h3 {
     margin: 0;
     font-size: 14px;
+}
+
+.dialog-header .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 2px;
+}
+
+.dialog-header .close-btn:hover {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
 }
 
 .dialog-content > .input-group,

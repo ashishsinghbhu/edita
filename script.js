@@ -150,6 +150,7 @@ class Edita {
             document.getElementById('countBtn').addEventListener('click', () => this.countOccurrences());
             document.getElementById('searchAllFilesBtn').addEventListener('click', () => this.searchAllFilesNow());
             document.getElementById('closeDialogBtn').addEventListener('click', () => this.closeDialog());
+            document.getElementById('findDialogCloseBtn').addEventListener('click', () => this.closeDialog());
             
             // Logs dialog
             document.getElementById('clearLogsBtn').addEventListener('click', () => this.clearLogs());
@@ -1658,6 +1659,9 @@ class Edita {
             console.log('Panel element:', panel);
             content.innerHTML = `<div class="search-summary">${summary}</div>${resultsHtml}`;
             panel.classList.add('active');
+            // Add bottom padding to editor-container so content isn't hidden by panel
+            const panelHeight = panel.offsetHeight || 200;
+            document.getElementById('editorContainer').style.paddingBottom = panelHeight + 'px';
             console.log('Panel classes after adding active:', panel.className);
             
             // Add click handlers for collapsible sections
@@ -1694,7 +1698,11 @@ class Edita {
                     const lineNum = parseInt(lineEl.dataset.line);
                     console.log('Clicked result: switching to tab', tabId, 'line', lineNum);
                     this.switchTab(tabId);
-                    this.goToLine(lineNum);
+                    // Use setTimeout to ensure tab switch completes before scrolling
+                    setTimeout(() => {
+                        this.goToLine(lineNum, searchTerm, caseSensitive);
+                        this.moveDialogIfObscured();
+                    }, 50);
                 }, true);
             });
             
@@ -1709,6 +1717,8 @@ class Edita {
 
     closeSearchResults() {
         document.getElementById('searchResultsPanel').classList.remove('active');
+        // Remove bottom padding from editor-container
+        document.getElementById('editorContainer').style.paddingBottom = '';
     }
 
     initSearchResultsResize() {
@@ -1736,6 +1746,10 @@ class Edita {
             
             if (newHeight >= minHeight && newHeight <= maxHeight) {
                 panel.style.height = newHeight + 'px';
+                // Update editor-container bottom padding to match new panel height
+                if (panel.classList.contains('active')) {
+                    document.getElementById('editorContainer').style.paddingBottom = newHeight + 'px';
+                }
             }
         });
 
@@ -2129,9 +2143,9 @@ class Edita {
         }
     }
 
-    goToLine(lineNum) {
+    goToLine(lineNum, searchTerm = null, caseSensitive = false) {
         try {
-            console.log('Going to line:', lineNum);
+            console.log('Going to line:', lineNum, 'searchTerm:', searchTerm);
             const lines = this.editor.value.split('\n');
             let charCount = 0;
             
@@ -2140,15 +2154,28 @@ class Edita {
             }
             
             this.editor.focus();
-            this.editor.setSelectionRange(charCount, charCount + (lines[lineNum - 1]?.length || 0));
             
-            // Better scrolling calculation
-            const lineHeight = 22; // Approximate line height
-            const targetScroll = (lineNum - 1) * lineHeight;
-            const editorHeight = this.editor.clientHeight;
-            const scrollPosition = Math.max(0, targetScroll - editorHeight / 2);
+            // If searchTerm provided, find and select only the search term in the line
+            if (searchTerm && lines[lineNum - 1]) {
+                const line = lines[lineNum - 1];
+                const searchIn = caseSensitive ? line : line.toLowerCase();
+                const searchFor = caseSensitive ? searchTerm : searchTerm.toLowerCase();
+                const termIndex = searchIn.indexOf(searchFor);
+                
+                if (termIndex !== -1) {
+                    // Select only the search term
+                    this.editor.setSelectionRange(charCount + termIndex, charCount + termIndex + searchTerm.length);
+                } else {
+                    // Fallback: select entire line if term not found
+                    this.editor.setSelectionRange(charCount, charCount + (lines[lineNum - 1]?.length || 0));
+                }
+            } else {
+                // No search term: select entire line
+                this.editor.setSelectionRange(charCount, charCount + (lines[lineNum - 1]?.length || 0));
+            }
             
-            this.editor.scrollTop = scrollPosition;
+            // Use temp div for accurate scrolling
+            this.scrollToSelection();
             this.updateStatusBar();
             
             console.log('Jumped to line', lineNum, 'at char position', charCount);
