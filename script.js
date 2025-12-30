@@ -1512,6 +1512,7 @@ class Edita {
                 document.getElementById('findResults').textContent = message;
                 
                 this.scrollToSelection();
+                this.moveDialogIfObscured();
             } else {
                 // Wrap to beginning
                 const firstIndex = this.findInText(content, searchTerm, 0, caseSensitive, wholeWord);
@@ -1528,6 +1529,7 @@ class Edita {
                     document.getElementById('findResults').textContent = message;
                     
                     this.scrollToSelection();
+                    this.moveDialogIfObscured();
                 } else {
                     document.getElementById('findResults').textContent = 'No matches found';
                 }
@@ -1539,20 +1541,42 @@ class Edita {
 
     scrollToSelection() {
         try {
-            // Calculate the line number of the current selection
-            const content = this.editor.value;
+            // Use temporary div to measure actual rendered height (handles line wrapping)
             const selectionStart = this.editor.selectionStart;
-            const beforeSelection = content.substring(0, selectionStart);
-            const lineNumber = beforeSelection.split('\n').length;
             
-            // Estimate line height (you can adjust this based on your CSS)
-            const lineHeight = 22;
-            const targetScrollTop = (lineNumber - 1) * lineHeight;
-            const editorHeight = this.editor.clientHeight;
+            // Create a temporary div with the same styling as the editor
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.visibility = 'hidden';
+            tempDiv.style.whiteSpace = window.getComputedStyle(this.editor).whiteSpace;
+            tempDiv.style.wordWrap = window.getComputedStyle(this.editor).wordWrap;
+            tempDiv.style.font = window.getComputedStyle(this.editor).font;
+            tempDiv.style.width = this.editor.clientWidth + 'px';
+            tempDiv.style.padding = window.getComputedStyle(this.editor).padding;
+            tempDiv.style.border = window.getComputedStyle(this.editor).border;
+            tempDiv.style.lineHeight = window.getComputedStyle(this.editor).lineHeight;
+            tempDiv.style.letterSpacing = window.getComputedStyle(this.editor).letterSpacing;
+            tempDiv.style.wordSpacing = window.getComputedStyle(this.editor).wordSpacing;
             
-            // Scroll to center the found text in the viewport
-            const scrollPosition = Math.max(0, targetScrollTop - editorHeight / 2);
-            this.editor.scrollTop = scrollPosition;
+            document.body.appendChild(tempDiv);
+            
+            // Get text before selection
+            const textBefore = this.editor.value.substring(0, selectionStart);
+            tempDiv.textContent = textBefore;
+            
+            // Measure the height of content before selection
+            const heightBefore = tempDiv.scrollHeight;
+            
+            // Clean up
+            document.body.removeChild(tempDiv);
+            
+            // Position at 25% from top of viewport
+            const viewportHeight = this.editor.clientHeight;
+            const targetScroll = Math.max(0, heightBefore - viewportHeight * 0.25);
+            
+            // Apply scroll
+            const maxScroll = Math.max(0, this.editor.scrollHeight - this.editor.clientHeight);
+            this.editor.scrollTop = Math.min(targetScroll, maxScroll);
         } catch (error) {
             this.logError('SCROLL TO SELECTION ERROR', 'Error scrolling to selection', error);
         }
@@ -1773,6 +1797,52 @@ class Edita {
         
         // Set cursor style on header
         header.style.cursor = 'grab';
+    }
+
+    moveDialogIfObscured() {
+        try {
+            const dialog = document.querySelector('#findDialog .dialog-content');
+            const editor = this.editor;
+            
+            // Get the position of the selected text in the editor
+            const selectionStart = editor.selectionStart;
+            const textBefore = editor.value.substring(0, selectionStart);
+            const lines = textBefore.split('\n');
+            const lineNumber = lines.length - 1;
+            const colNumber = lines[lines.length - 1].length;
+            
+            // Calculate approximate pixel position of the selection
+            const lineHeight = 22; // Approximate from CSS
+            const charWidth = 8; // Approximate monospace char width
+            const editorRect = editor.getBoundingClientRect();
+            const lineNumbersWidth = document.getElementById('lineNumbers').offsetWidth;
+            
+            const selectionY = editorRect.top + (lineNumber * lineHeight) - editor.scrollTop + 12; // 12 is padding
+            const selectionX = editorRect.left + lineNumbersWidth + (colNumber * charWidth) - editor.scrollLeft + 12;
+            
+            // Get dialog position and dimensions
+            const dialogRect = dialog.getBoundingClientRect();
+            
+            // Check if selection is obscured by dialog
+            const isObscured = selectionX >= dialogRect.left && 
+                              selectionX <= dialogRect.right &&
+                              selectionY >= dialogRect.top && 
+                              selectionY <= dialogRect.bottom;
+            
+            if (isObscured) {
+                // Move dialog to the right side to avoid obscuring the selection
+                const viewportWidth = window.innerWidth;
+                const dialogWidth = dialogRect.width;
+                
+                // Position dialog on the right side with some margin
+                dialog.style.left = 'auto';
+                dialog.style.right = '20px';
+                dialog.style.top = '100px'; // Keep it below browser tabs
+                dialog.style.transform = 'none';
+            }
+        } catch (error) {
+            this.logError('MOVE DIALOG ERROR', 'Error moving dialog', error);
+        }
     }
 
     highlightMatch(text, searchTerm, caseSensitive) {
