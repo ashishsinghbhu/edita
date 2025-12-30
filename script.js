@@ -145,6 +145,7 @@ class Edita {
             
             // Find/Replace dialog
             document.getElementById('findNextBtn').addEventListener('click', () => this.findNext());
+            document.getElementById('findPreviousBtn').addEventListener('click', () => this.findPrevious());
             document.getElementById('replaceOneBtn').addEventListener('click', () => this.replaceOne());
             document.getElementById('replaceAllBtn').addEventListener('click', () => this.replaceAll());
             document.getElementById('countBtn').addEventListener('click', () => this.countOccurrences());
@@ -1538,6 +1539,82 @@ class Edita {
         } catch (error) {
             this.logError('FIND NEXT ERROR', 'Error finding next', error);
         }
+    }
+
+    findPrevious() {
+        try {
+            const searchTerm = document.getElementById('findInput').value;
+            if (!searchTerm) return;
+
+            const caseSensitive = document.getElementById('caseSensitive').checked;
+            const wholeWord = document.getElementById('wholeWord').checked;
+
+            // Clear any highlights from Search All Files
+            this.clearHighlights();
+
+            // Get content and current position
+            const content = this.editor.value;
+            const currentPos = this.editor.selectionStart - 1;
+            let index = this.findInTextReverse(content, searchTerm, currentPos, caseSensitive, wholeWord);
+            
+            if (index !== -1) {
+                // Found match before current position
+                this.editor.focus();
+                this.editor.setSelectionRange(index, index + searchTerm.length);
+                
+                const actualStart = this.editor.selectionStart;
+                const textBeforeSelection = this.editor.value.substring(0, actualStart);
+                const lineNumber = textBeforeSelection.split('\n').length;
+                
+                const message = `Found at line ${lineNumber}`;
+                document.getElementById('findResults').textContent = message;
+                
+                this.scrollToSelection();
+                this.moveDialogIfObscured();
+            } else {
+                // Wrap to end
+                const lastIndex = this.findInTextReverse(content, searchTerm, content.length, caseSensitive, wholeWord);
+                if (lastIndex !== -1) {
+                    this.editor.focus();
+                    this.editor.setSelectionRange(lastIndex, lastIndex + searchTerm.length);
+                    
+                    const actualStart = this.editor.selectionStart;
+                    const textBeforeSelection = this.editor.value.substring(0, actualStart);
+                    const lineNumber = textBeforeSelection.split('\n').length;
+                    
+                    const message = `Wrapped to line ${lineNumber}`;
+                    document.getElementById('findResults').textContent = message;
+                    
+                    this.scrollToSelection();
+                    this.moveDialogIfObscured();
+                } else {
+                    document.getElementById('findResults').textContent = 'No matches found';
+                }
+            }
+        } catch (error) {
+            this.logError('FIND PREVIOUS ERROR', 'Error finding previous', error);
+        }
+    }
+
+    findInTextReverse(text, searchTerm, startPos, caseSensitive, wholeWord) {
+        const searchText = caseSensitive ? text.substring(0, startPos) : text.substring(0, startPos).toLowerCase();
+        const searchFor = caseSensitive ? searchTerm : searchTerm.toLowerCase();
+        
+        let index = searchText.lastIndexOf(searchFor);
+        
+        if (wholeWord && index !== -1) {
+            // Check if match is a whole word
+            const before = index > 0 ? searchText[index - 1] : ' ';
+            const after = index + searchFor.length < text.length ? text[index + searchFor.length] : ' ';
+            const isWordChar = (char) => /\w/.test(char);
+            
+            if (isWordChar(before) || isWordChar(after)) {
+                // Not a whole word, search for previous occurrence
+                return this.findInTextReverse(text, searchTerm, index, caseSensitive, wholeWord);
+            }
+        }
+        
+        return index;
     }
 
     scrollToSelection() {
